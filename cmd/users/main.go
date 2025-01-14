@@ -39,15 +39,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("Erro ao carregar configurações do app: %v", err)
 	}
-
 	a := app.NewUser(&c.Users)
 	a.RegisterRoutes(http.DefaultServeMux)
 	log.Printf("Iniciando users na porta %s", c.Server.Endpoint.HTTP)
-	_ = http.ListenAndServe(c.Server.Endpoint.HTTP, http.DefaultServeMux)
+	err = http.ListenAndServe(c.Server.Endpoint.HTTP, http.DefaultServeMux)
+	if err != nil {
+		log.Fatalf("Erro inciar o servidor: %v", err)
+	}
 }
 
 func setupOTel(ctx context.Context) (func(context.Context) error, error) {
-	confFlag := flag.String("config", "config-otel.yaml", "otel config file to parse")
+	confFlag := flag.String("otelConfig", "config-otel.yaml", "otel config file to parse")
 	flag.Parse()
 	b, err := os.ReadFile(*confFlag)
 	if err != nil {

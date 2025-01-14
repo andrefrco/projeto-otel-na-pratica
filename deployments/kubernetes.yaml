@@ -14,9 +14,10 @@ spec:
     spec:
       containers:
       - name: users
-        image: ghcr.io/dosedetelemetria/projeto-otel-na-pratica/users:latest
+        #image: ghcr.io/dosedetelemetria/projeto-otel-na-pratica/users:latest
+        image: projeto-otel-na-pratica/users:local
         ports:
-        - containerPort: 8081
+        - containerPort: 8080
 
 ---
 apiVersion: v1
@@ -28,8 +29,8 @@ spec:
     app: users
   ports:
   - name: http
-    port: 8081
-    targetPort: 8081
+    port: 8080
+    targetPort: 8080
   type: ClusterIP
 
 ---
@@ -46,12 +47,20 @@ spec:
     metadata:
       labels:
         app: plans
+      annotations:
+        instrumentation.opentelemetry.io/inject-go: "true"
+        instrumentation.opentelemetry.io/otel-go-auto-target-exe: "/plans"
     spec:
       containers:
       - name: plans
         image: ghcr.io/dosedetelemetria/projeto-otel-na-pratica/plans:latest
         ports:
         - containerPort: 8082
+        env:
+          - name: OTEL_SERVICE_NAME
+            value: "plans"
+          - name: OTEL_RESOURCE_ATTRIBUTES
+            value: "service.version=0.0.1,service.owner=grupo-5"
 
 ---
 apiVersion: v1
@@ -81,12 +90,23 @@ spec:
     metadata:
       labels:
         app: subscriptions
+      annotations:
+        instrumentation.opentelemetry.io/inject-go: "true"
+        instrumentation.opentelemetry.io/otel-go-auto-target-exe: "/subscriptions"
     spec:
       containers:
       - name: subscriptions
         image: ghcr.io/dosedetelemetria/projeto-otel-na-pratica/subscriptions:latest
         ports:
         - containerPort: 8083
+        env:
+          - name: OTEL_SERVICE_NAME
+            value: "subscriptions"
+          - name: OTEL_RESOURCE_ATTRIBUTES
+            value: "service.version=0.0.1,service.owner=grupo-5"
+        securityContext:
+          runAsUser: 0
+          privileged: true
 
 ---
 apiVersion: v1
@@ -116,12 +136,20 @@ spec:
     metadata:
       labels:
         app: payments
+      annotations:
+        instrumentation.opentelemetry.io/inject-go: "true"
+        instrumentation.opentelemetry.io/otel-go-auto-target-exe: "/payments"
     spec:
       containers:
       - name: payments
         image: ghcr.io/dosedetelemetria/projeto-otel-na-pratica/payments:latest
         ports:
         - containerPort: 8084
+        env:
+          - name: OTEL_SERVICE_NAME
+            value: "payments"
+          - name: OTEL_RESOURCE_ATTRIBUTES
+            value: "service.version=0.0.1,service.owner=grupo-5"
 
 ---
 apiVersion: v1

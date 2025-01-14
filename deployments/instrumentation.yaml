@@ -1,0 +1,33 @@
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: go-instrumentation
+spec:
+  propagators:
+    - tracecontext
+    - baggage
+    - b3
+  sampler:
+    type: parentbased_traceidratio
+    argument: "1"
+  go:
+    env:
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: http://otel-collector:4318
+      - name: OTEL_EXPORTER_OTLP_PROTOCOL
+        value: "http/protobuf"
+      - name: OTEL_LOG_LEVEL
+        value: debug
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-tui
+spec:
+  selector:
+    app: otel-tui
+  ports:
+    - protocol: TCP
+      port: 4318
+      targetPort: 4318
+  type: ClusterIP
