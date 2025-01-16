@@ -5,8 +5,7 @@ Projeto da semana: utilizando o projeto referência no GitHub, façam um fork e 
 ## Progresso de objetivos
 - ⏳  Implementar instrumentação manual usando o otel-sdk no app users
     - A configuração já está feita, mas ainda faltam alguns ajustes de logs, traces e métricas de todos os endpoints
-- ⏳  Implementar instrumentação automática no restante dos apps
-    - O operator e a instrumentação do go já estão instaladas, assim como o init-container. Falta validar porque não tá sendo exportado para o otel-tui.
+- ⏳  Replicar a instrumentação para o restante dos apps
 - ❌ Gerar testes de carga
     - Não iniciado, pode ser um sh simples usando o otel-cli
 - ❌ Comparar as instrumentações e validar o nível de detalhe cada tipo
@@ -29,20 +28,21 @@ Requisitos
 - kubectl
 
 ```terminal
-# Inicia o cluster e instala as dependencias de auto instrumentação
-minikube start
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.12.0/cert-manager.yaml
-kubectl apply -f https://github.com/open-telemetry/opentelemetry-operator/releases/latest/download/opentelemetry-operator.yaml
-kubectl apply -f deployments/instrumentation.yaml
-kubectl patch deployment opentelemetry-operator-controller-manager -n opentelemetry-operator-system --type='json' -p='[
-  {"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--enable-go-instrumentation=true"}
-]'
+# Inicia o cluster
+minikube start --driver=docker
 
-# Gera o binário alterado e faz o build da imagem
-cd cmd/users
+# Usar o daemon do minikube para subir a imagem
 eval $(minikube docker-env)
-go build -o users # se for apple silicon GOARCH=arm64 GOOS=linux
+
+# Gera o binário alterado e faz o build da imagem, esteja dentro do diretorio /cmd/<app>
+GOARCH=arm64 GOOS=linux go build -o users
 docker build -t projeto-otel-na-pratica/users:local .
+GOARCH=arm64 GOOS=linux go build -o plans
+docker build -t projeto-otel-na-pratica/plans:local .
+GOARCH=arm64 GOOS=linux go build -o subscriptions
+docker build -t projeto-otel-na-pratica/subscriptions:local .
+GOARCH=arm64 GOOS=linux go build -o payments
+docker build -t projeto-otel-na-pratica/payments:local .
 
 kubectl apply -f deployments/kubernetes.yaml
 
@@ -50,33 +50,16 @@ kubectl apply -f deployments/kubernetes.yaml
 kubectl run otel-tui-temp --rm -it --image=ymtdzzz/otel-tui:latest --labels app=otel-tui
 ```
 
-### Apple silicon
-
-Para funcionar a instrumentação no apple silicon é necessário recompilar as imagens 
-```
-GOARCH=arm64 GOOS=linux o build -o users|plans|subscriptions|payments
-docker build -t projeto-otel-na-pratica/users|plans|subscriptions|payments:local .
-```
-
-### App user com instrumentação manual
-Foi a única app onde foi aplicada a instrumentação manual, para efetuar as alterações e testar é mais rápido, por não precisa gerar a imagem e atualizar o deployment.
+### Execução por app
 
 Requisitos
 - Instale o [otel-tui](https://github.com/ymtdzzz/otel-tui?tab=readme-ov-file#homebrew)
 
-Passos:
-- Execute o app
-    ```terminal
-    go run ./cmd/users/
-    ```
-- Em outro terminal
-    ```terminal
-    otel-tui
-    ```
-- Em outro terminal
-    ```terminal
-    curl localhost:8080/users
-    ```
+```
+go run ./cmd/users/
+otel-tui
+curl localhost:8080/users
+```
 
 # Apresentação
 Draft como objetivo de organizar uma timeline da nossa discussão na sexta
@@ -85,7 +68,12 @@ Draft como objetivo de organizar uma timeline da nossa discussão na sexta
 
 ## Problemas Visualizados
 - A falta de testes unitários dificulta a instrumentação, principalmente em refatoração de funções que exigem propagação de contexto.
-- TargetPort do users está em 8081 no deploy e o app está subindo em 8080 (isso pode ser um PR aberto).
-- O goreleaser não está compilando as imagens em arm64 o que dificulta a execução no apple silicon, embora tenha o QEMU no minikube o apontamento pro binário pelo instrumentation do go é um problema.
+- TargetPort errados no deployments, impossibilitando a execução local de todos os apps.
+- Compilação de imagens não suportam arm64, [issue](https://github.com/dosedetelemetria/projeto-otel-na-pratica/issues/13).
 
 ## Surpresas
+- O container de autoinstrumentação na versão `v0.19.0-alpha` não foi possível ser adicionado. Um erro na versão do kernel impactou a lib do go-instrumentation, onde é usada operações em ebpf. Mais detalhes podem ser encontrados no [PR](https://github.com/open-telemetry/opentelemetry-go-instrumentation/pull/1567). Ainda não foi feita release da versão `v0.20.0-alpha`, mais detalhes [aqui](https://github.com/open-telemetry/opentelemetry-go-instrumentation/milestone/17). Para resolver isso basicamente setamos a imagem superior para subir o minikube, com a flag `--base-image gcr.io/k8s-minikube/minikube-iso:linux-v5`. Ao tentar colocar direto na imagem tivemos o problema abaixo:
+    ```
+    {"time":"2025-01-16T02:39:26.65205717Z","level":"ERROR","source":{"function":"main.main","file":"/app/cli/main.go","line":125},"msg":"failed to load instrumentation","error":"offset not found: go.opentelemetry.io/otel/trace.SpanContext:traceID (1.33.0)\noffset not found: go.opentelemetry.io/otel/trace.SpanContext:spanID (1.33.0)\noffset not found: go.opentelemetry.io/otel/trace.SpanContext:traceFlags (1.33.0)"}
+    ```
+    O erro é solucionável provavelmente com ajuste de versão das dependências, porém não há tempo hábil.
