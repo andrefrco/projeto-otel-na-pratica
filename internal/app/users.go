@@ -19,7 +19,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-const name = "projeto-otel-na-pratica/internal/app/users"
+const name = "internal/app/users"
 
 var (
 	tracer = otel.Tracer(name)
@@ -74,7 +74,7 @@ func (a *User) instrumentedHandler(next http.HandlerFunc, operation string) http
 			attribute.String("http.url", r.URL.Path),
 		)
 
-		logger.InfoContext(ctx, "Processando requisição", "method", r.Method, "url", r.URL.Path, "trace_id", span.SpanContext().TraceID().String())
+		logger.InfoContext(ctx, "Handling API request", "method", r.Method, "url", r.URL.Path, "trace_id", span.SpanContext().TraceID().String())
 
 		start := time.Now()
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -82,7 +82,5 @@ func (a *User) instrumentedHandler(next http.HandlerFunc, operation string) http
 
 		reqCnt.Add(ctx, 1)
 		reqDur.Record(ctx, duration)
-
-		logger.InfoContext(ctx, "Requisição completa", "method", r.Method, "url", r.URL.Path, "trace_id", span.SpanContext().TraceID().String())
 	}
 }

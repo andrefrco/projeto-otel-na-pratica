@@ -8,8 +8,6 @@ Projeto da semana: utilizando o projeto referência no GitHub, façam um fork e 
 - ⏳  Replicar a instrumentação para o restante dos apps
 - ❌ Gerar testes de carga
     - Não iniciado, pode ser um sh simples usando o otel-cli
-- ❌ Comparar as instrumentações e validar o nível de detalhe cada tipo
-    - Não iniciado
 - ⏳ Mapear possíveis problemas em nossas apps
     - Está em progresso, estou colocando no fim do documento
 

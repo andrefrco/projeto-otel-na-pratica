@@ -10,7 +10,9 @@ import (
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const name = "projeto-otel-na-pratica/internal/pkg/handler/http"
@@ -36,50 +38,70 @@ func NewUserHandler(store store.User) *UserHandler {
 }
 
 func (h *UserHandler) List(w http.ResponseWriter, r *http.Request) {
-	users, err := h.store.List(r.Context())
+	ctx, listSpan := tracer.Start(r.Context(), "List Users from Store")
+	users, err := h.store.List(ctx)
 	if err != nil {
+		listSpan.RecordError(err)
+		listSpan.SetStatus(codes.Error, "Failed to list users in store")
+		logger.ErrorContext(ctx, "Error listining users in store", "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		logger.ErrorContext(r.Context(), "Erro ao listar usuários", "error", err)
+		listSpan.End()
 		return
 	}
+	listSpan.End()
 
+	ctx, encodeSpan := tracer.Start(ctx, "Encode Response JSON")
 	err = json.NewEncoder(w).Encode(users)
 	if err != nil {
+		encodeSpan.RecordError(err)
+		encodeSpan.SetStatus(codes.Error, "Failed to encode JSON response")
+		logger.ErrorContext(ctx, "Error encoding JSON response", "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		logger.ErrorContext(r.Context(), "Erro ao codificar resposta JSON", "error", err)
+		encodeSpan.End()
 		return
 	}
+	encodeSpan.SetStatus(codes.Ok, "Response encoded successfully")
+	encodeSpan.End()
 }
 
 func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
-	ctx, span := tracer.Start(r.Context(), "Decode Request Body for POST /users")
-	defer span.End()
-
+	ctx, decodeSpan := tracer.Start(r.Context(), "Decode Request Body")
 	user := &model.User{}
 	if err := json.NewDecoder(r.Body).Decode(user); err != nil {
-		span.RecordError(err)
+		decodeSpan.RecordError(err)
 		logger.ErrorContext(r.Context(), "Erro ao decodificar request body", "error", err)
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
+	decodeSpan.SetStatus(codes.Ok, "Decoded successfully")
+	decodeSpan.End()
 
+	ctx, storeSpan := tracer.Start(ctx, "Store Create Operation", trace.WithSpanKind(trace.SpanKindInternal))
 	created, err := h.store.Create(ctx, user)
 	if err != nil {
-		span.RecordError(err)
-		logger.ErrorContext(r.Context(), "Erro ao criar usuário no store", "error", err)
+		storeSpan.RecordError(err)
+		storeSpan.SetStatus(codes.Error, "Failed to create user in store")
+		logger.ErrorContext(ctx, "Error creating user in store", "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		storeSpan.End()
 		return
 	}
+	storeSpan.SetAttributes(attribute.String("user.id", created.ID))
+	storeSpan.SetStatus(codes.Ok, "User stored successfully")
+	storeSpan.End()
 
-	span.SetAttributes(attribute.String("user.id", created.ID))
-
+	ctx, encodeSpan := tracer.Start(ctx, "Encode Response JSON")
 	err = json.NewEncoder(w).Encode(created)
 	if err != nil {
-		span.RecordError(err)
-		logger.ErrorContext(r.Context(), "Erro ao codificar resposta JSON", "error", err)
+		encodeSpan.RecordError(err)
+		encodeSpan.SetStatus(codes.Error, "Failed to encode JSON response")
+		logger.ErrorContext(ctx, "Error encoding JSON response", "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		encodeSpan.End()
 		return
 	}
+	encodeSpan.SetStatus(codes.Ok, "Response encoded successfully")
+	encodeSpan.End()
 }
 
 func (h *UserHandler) Get(w http.ResponseWriter, r *http.Request) {

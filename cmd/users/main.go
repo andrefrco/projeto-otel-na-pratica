@@ -13,11 +13,14 @@ import (
 
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/app"
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/config"
+	"go.opentelemetry.io/contrib/bridges/otelslog"
 	otelconfig "go.opentelemetry.io/contrib/config/v0.3.0"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
 )
+
+const name = "cmd/users"
 
 func main() {
 	ctx := context.Background()
@@ -25,27 +28,39 @@ func main() {
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 	otelShutdown, err := setupOTel(ctx)
 	if err != nil {
-		log.Fatalf("Error to setup otel: %v\n", err)
+		log.Fatal("Failed to start OpenTelemetry setup", err)
 	}
+
+	logger := otelslog.NewLogger(name)
+	logger.InfoContext(ctx, "OpenTelemetry SDK configured successfully")
 
 	defer func() {
 		err = errors.Join(err, otelShutdown(context.Background()))
-		log.Fatalf("Error to shutdown otel: %v\n", err)
+		logger.ErrorContext(ctx, "Error shutting down OpenTelemetry", "error", err)
+		os.Exit(1)
 	}()
 
 	configFlag := flag.String("config", "config.yaml", "path to the config file")
 	flag.Parse()
 	c, err := config.LoadConfig(*configFlag)
 	if err != nil {
-		log.Fatalf("Erro ao carregar configurações do app: %v", err)
+		logger.ErrorContext(ctx, "Error loading app configurations", "error", err)
+		os.Exit(1)
 	}
+
+	logger.InfoContext(ctx, "Application configuration loaded successfully", "port", c.Server.Endpoint.HTTP)
+
 	a := app.NewUser(&c.Users)
 	a.RegisterRoutes(http.DefaultServeMux)
-	log.Printf("Iniciando users na porta %s", c.Server.Endpoint.HTTP)
+
+	logger.InfoContext(ctx, "User service initialized and routes registered successfully")
+
 	err = http.ListenAndServe(c.Server.Endpoint.HTTP, http.DefaultServeMux)
 	if err != nil {
-		log.Fatalf("Erro inciar o servidor: %v", err)
+		logger.ErrorContext(ctx, "Error starting the HTTP server", "error", err)
+		os.Exit(1)
 	}
+	logger.InfoContext(ctx, "HTTP server started successfully and is listening for requests")
 }
 
 func setupOTel(ctx context.Context) (func(context.Context) error, error) {

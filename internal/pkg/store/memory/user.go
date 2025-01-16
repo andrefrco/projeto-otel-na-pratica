@@ -37,30 +37,25 @@ func (u *inMemoryUser) Get(ctx context.Context, id string) (*model.User, error) 
 	defer span.End()
 
 	span.SetAttributes(attribute.String("user.id", id))
+	span.AddEvent("Starting user finding")
 
 	user, exists := u.store[id]
 	if !exists {
 		span.SetStatus(codes.Unset, "User not found")
 		span.AddEvent("User not found", trace.WithAttributes(attribute.String("user.id", id)))
 
-		logger.WarnContext(ctx, "Usuário não encontrado", "user_id", id)
+		logger.WarnContext(ctx, "User not found", "user_id", id)
 		return nil, nil
 	}
 
-	logger.InfoContext(ctx, "Usuário encontrado com sucesso", "user_id", id)
+	logger.InfoContext(ctx, "User found successfully", "user_id", id)
+	span.SetStatus(codes.Ok, "User found successfully")
 	return user, nil
 }
 
 func (u *inMemoryUser) Create(ctx context.Context, user *model.User) (*model.User, error) {
-	ctx, span := tracer.Start(ctx, "Store Create Operation", trace.WithSpanKind(trace.SpanKindInternal))
-	defer span.End()
 	u.store[user.ID] = user
-
-	span.SetAttributes(
-		attribute.String("user.id", user.ID),
-		attribute.String("operation.name", "Insert"),
-	)
-	logger.InfoContext(ctx, "Usuário criado com sucesso", "user_id", user.ID)
+	logger.InfoContext(ctx, "User created successfully", "user_id", user.ID)
 	return user, nil
 }
 
@@ -78,7 +73,7 @@ func (u *inMemoryUser) List(ctx context.Context) ([]*model.User, error) {
 	ctx, span := tracer.Start(ctx, "List Users from Memory Store", trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
 
-	span.AddEvent("Iniciando listagem de usuários")
+	span.AddEvent("Starting user listing")
 
 	users := make([]*model.User, 0, len(u.store))
 	for _, user := range u.store {
@@ -87,10 +82,11 @@ func (u *inMemoryUser) List(ctx context.Context) ([]*model.User, error) {
 
 	span.SetAttributes(
 		attribute.Int("users.count", len(users)),
+		attribute.String("operation.name", "select"),
 	)
 
-	span.AddEvent("Listagem de usuários concluída")
-	logger.InfoContext(ctx, "Listagem de usuários realizada com sucesso", "total_users", len(users))
+	span.AddEvent("User listing completed")
+	logger.InfoContext(ctx, "User listing successfully completed", "total_users", len(users))
 
 	return users, nil
 }
