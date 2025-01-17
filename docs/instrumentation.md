@@ -5,7 +5,7 @@ Projeto da semana: utilizando o projeto referência no GitHub, façam um fork e 
 ## Progresso de objetivos
 - ⏳  Implementar instrumentação manual usando o otel-sdk no app users
     - A configuração já está feita, mas ainda faltam alguns ajustes de logs, traces e métricas de todos os endpoints
-- ⏳  Replicar a instrumentação para o restante dos apps
+- ❌  Replicar a instrumentação para o restante dos apps
 - ❌ Gerar testes de carga
     - Não iniciado, pode ser um sh simples usando o otel-cli
 - ⏳ Mapear possíveis problemas em nossas apps
@@ -60,9 +60,6 @@ curl localhost:8080/users
 ```
 
 # Apresentação
-Draft como objetivo de organizar uma timeline da nossa discussão na sexta
-
-## Problemas corrigidos
 
 ## Problemas Visualizados
 - A falta de testes unitários dificulta a instrumentação, principalmente em refatoração de funções que exigem propagação de contexto.
