@@ -9,6 +9,8 @@ import (
 
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/pkg/model"
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/pkg/store"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // PlanHandler is an HTTP handler that performs CRUD operations for model.Plan using a store.Plan
@@ -24,7 +26,15 @@ func NewPlanHandler(store store.Plan) *PlanHandler {
 }
 
 func (h *PlanHandler) List(w http.ResponseWriter, r *http.Request) {
-	plans, err := h.store.List(r.Context())
+	ctx, span := otel.Tracer("plans").Start(r.Context(), "plan.list", trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+	// More than 10 internal spans in one trace.
+	for i := 0; i < 11; i++ {
+		_, child := otel.Tracer("plans").Start(ctx, "plan.list.internal")
+		child.End()
+	}
+
+	plans, err := h.store.List(ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -44,7 +54,10 @@ func (h *PlanHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := h.store.Create(r.Context(), plan)
+	ctx, span := otel.Tracer("plans").Start(r.Context(), "plan.create", trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+
+	created, err := h.store.Create(ctx, plan)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -59,7 +72,11 @@ func (h *PlanHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 func (h *PlanHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	plan, err := h.store.Get(r.Context(), id)
+	// Span name includes the id.
+	ctx, span := otel.Tracer("plans").Start(r.Context(), "GET /plans/"+id, trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+
+	plan, err := h.store.Get(ctx, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -79,7 +96,10 @@ func (h *PlanHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := h.store.Update(r.Context(), plan)
+	ctx, span := otel.Tracer("plans").Start(r.Context(), "plan.update", trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+
+	updated, err := h.store.Update(ctx, plan)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -94,7 +114,10 @@ func (h *PlanHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 func (h *PlanHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := h.store.Delete(r.Context(), id)
+	ctx, span := otel.Tracer("plans").Start(r.Context(), "plan.delete", trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+
+	err := h.store.Delete(ctx, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

@@ -5,10 +5,15 @@ package http
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/pkg/model"
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/pkg/store"
+	"go.opentelemetry.io/contrib/bridges/otelslog"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // UserHandler is an HTTP handler that performs CRUD operations for model.User using a store.User
@@ -24,7 +29,10 @@ func NewUserHandler(store store.User) *UserHandler {
 }
 
 func (h *UserHandler) List(w http.ResponseWriter, r *http.Request) {
-	users, err := h.store.List(r.Context())
+	ctx, span := otel.Tracer("users").Start(r.Context(), "user.list", trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+
+	users, err := h.store.List(ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -44,11 +52,21 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := h.store.Create(r.Context(), user)
+	ctx, span := otel.Tracer("users").Start(r.Context(), "user.create", trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("user.email", user.Email),
+		attribute.String("user.address", user.Address),
+		attribute.String("service.name", "users"),
+	)
+
+	created, err := h.store.Create(ctx, user)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	otelslog.NewLogger("users").InfoContext(ctx, "user created at "+user.Address, slog.String("email", user.Email))
 
 	err = json.NewEncoder(w).Encode(created)
 	if err != nil {
@@ -59,7 +77,11 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 func (h *UserHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	user, err := h.store.Get(r.Context(), id)
+	// Span name includes the id.
+	ctx, span := otel.Tracer("users").Start(r.Context(), "GET /users/"+id, trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+
+	user, err := h.store.Get(ctx, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -84,7 +106,10 @@ func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updatedSubscription, err := h.store.Update(r.Context(), user)
+	ctx, span := otel.Tracer("users").Start(r.Context(), "user.update", trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+
+	updatedSubscription, err := h.store.Update(ctx, user)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -99,7 +124,10 @@ func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 func (h *UserHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := h.store.Delete(r.Context(), id)
+	ctx, span := otel.Tracer("users").Start(r.Context(), "user.delete", trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+
+	err := h.store.Delete(ctx, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

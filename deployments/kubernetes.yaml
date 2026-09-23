@@ -136,3 +136,58 @@ spec:
     port: 8084
     targetPort: 8084
   type: ClusterIP
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otelcol
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otelcol
+  template:
+    metadata:
+      labels:
+        app: otelcol
+    spec:
+      containers:
+      - name: otelcol
+        image: otel/opentelemetry-collector-contrib:0.161.0
+        args: ["--config=/etc/otelcol/config.yaml"]
+        env:
+        - name: EXTERNAL_OTLP_ENDPOINT
+          value: http://external-collector:4318
+        - name: EXTERNAL_OTLP_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: external-otlp
+              key: token
+              optional: true
+        ports:
+        - containerPort: 4317
+        - containerPort: 4318
+        volumeMounts:
+        - name: config
+          mountPath: /etc/otelcol
+      volumes:
+      - name: config
+        configMap:
+          name: otelcol
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otelcol
+spec:
+  selector:
+    app: otelcol
+  ports:
+  - name: otlp-grpc
+    port: 4317
+    targetPort: 4317
+  - name: otlp-http
+    port: 4318
+    targetPort: 4318

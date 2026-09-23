@@ -11,6 +11,7 @@ A aplicação não possui nenhuma instrumentação. Nada. Durante a especializa�
 - [Módulos Disponíveis](#módulos-disponíveis)
 - [Configuração](#configuração)
 - [Como as coisas funcionam](#como-as-coisas-funcionam)
+- [Ver a telemetria localmente](#ver-a-telemetria-localmente)
 - [Contribuindo](#contribuindo)
 - [Licença](#licença)
 
@@ -70,6 +71,36 @@ server:
 ## Como as coisas funcionam
 
 * Os serviços "plans" e "users" não tem dependências com outros serviços. O serviço "subscriptions" precisa fazer conexões com "plans" e "users", enquanto que "payments" faz uma conexão com "subscriptions".
+
+---
+
+## Ver a telemetria localmente
+
+Cada binário (`cmd/all-in-one`, `users`, `plans`, `subscriptions`, `payments`) exporta trace, log e métrica por OTLP/HTTP para `http://localhost:4318`, a menos que `OTEL_EXPORTER_OTLP_ENDPOINT` esteja definido. O collector em `deployments/otelcol.yaml` recebe nessa porta, imprime o payload no stdout e encaminha para o collector externo. Sem `EXTERNAL_OTLP_ENDPOINT`, o destino é `http://external-collector:4318`. O token, se existir, vai no header `Authorization: Bearer` a partir de `EXTERNAL_OTLP_TOKEN`.
+
+O `deployments/kubernetes.yaml` sobe o collector e as imagens publicadas de users, plans, subscriptions e payments. Essas imagens não chamam o setup de telemetria e não apontam para o serviço `otelcol`. Aplicar esse manifesto no kind ou no minikube não envia o usuário criado.
+
+Na raiz do repositório, com o Docker rodando:
+
+```terminal
+$ docker run --rm -p 4318:4318 \
+    -e EXTERNAL_OTLP_ENDPOINT \
+    -e EXTERNAL_OTLP_TOKEN \
+    -v "$PWD/deployments/otelcol.yaml:/etc/otelcol/config.yaml:ro" \
+    otel/opentelemetry-collector-contrib:0.161.0 \
+    --config=/etc/otelcol/config.yaml
+```
+
+Em outro terminal, o `all-in-one` só sobe se o NATS e a stream `payments` existirem. Os comandos estão em [cmd/all-in-one/README.md](cmd/all-in-one/README.md). Depois:
+
+```terminal
+$ go run ./cmd/all-in-one/
+$ curl -X POST localhost:8080/users \
+    -H 'Content-Type: application/json' \
+    -d '{"id":"user-1","name":"Ada","email":"ada@example.com","address":"Rua das Flores, 100, apto 12, Sao Paulo, SP, 01310-100"}'
+```
+
+O e-mail sai no atributo `user.email` do span e no atributo `email` do log. O endereço sai no atributo `user.address` e no corpo do log, na frase `user created at ...`. O batch do SDK leva alguns segundos; a métrica sai no intervalo de 5s. O exporter `debug` do collector imprime o payload no stdout desse container.
 
 ---
 

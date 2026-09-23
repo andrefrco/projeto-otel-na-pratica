@@ -4,11 +4,13 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"net/http"
 
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/app"
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/config"
+	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/telemetry"
 )
 
 func main() {
@@ -16,6 +18,10 @@ func main() {
 	flag.Parse()
 
 	c, _ := config.LoadConfig(*configFlag)
+
+	if err := telemetry.Setup(context.Background()); err != nil {
+		panic(err)
+	}
 
 	a := app.NewUser(&c.Users)
 	a.RegisterRoutes(http.DefaultServeMux)

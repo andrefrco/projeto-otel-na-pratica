@@ -10,6 +10,8 @@ import (
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/api"
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/pkg/model"
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/pkg/store"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type planServer struct {
@@ -25,6 +27,9 @@ func NewPlanServer(store store.Plan) api.PlanServiceServer {
 }
 
 func (s *planServer) Get(ctx context.Context, req *api.GetRequest) (*api.GetResponse, error) {
+	ctx, span := otel.Tracer("plans").Start(ctx, "GET /plans/"+req.Id, trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+
 	plan, err := s.store.Get(ctx, req.Id)
 	if err != nil {
 		return nil, err
@@ -46,6 +51,9 @@ func (s *planServer) Get(ctx context.Context, req *api.GetRequest) (*api.GetResp
 }
 
 func (s *planServer) Create(ctx context.Context, req *api.CreateRequest) (*api.CreateResponse, error) {
+	ctx, span := otel.Tracer("plans").Start(ctx, "plan.create", trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+
 	plan, err := s.store.Create(ctx, &model.Plan{
 		ID:          req.Plan.Id,
 		Name:        req.Plan.Name,
@@ -74,6 +82,9 @@ func (s *planServer) Create(ctx context.Context, req *api.CreateRequest) (*api.C
 }
 
 func (s *planServer) Update(ctx context.Context, req *api.UpdateRequest) (*api.UpdateResponse, error) {
+	ctx, span := otel.Tracer("plans").Start(ctx, "plan.update", trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+
 	plan, err := s.store.Update(ctx, &model.Plan{
 		ID:          req.Plan.Id,
 		Name:        req.Plan.Name,
@@ -101,6 +112,9 @@ func (s *planServer) Update(ctx context.Context, req *api.UpdateRequest) (*api.U
 }
 
 func (s *planServer) Delete(ctx context.Context, req *api.DeleteRequest) (*api.DeleteResponse, error) {
+	ctx, span := otel.Tracer("plans").Start(ctx, "plan.delete", trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+
 	err := s.store.Delete(ctx, req.Id)
 	if err != nil {
 		return nil, err
@@ -109,6 +123,9 @@ func (s *planServer) Delete(ctx context.Context, req *api.DeleteRequest) (*api.D
 }
 
 func (s *planServer) List(ctx context.Context, req *api.ListRequest) (*api.ListResponse, error) {
+	ctx, span := otel.Tracer("plans").Start(ctx, "plan.list", trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
+
 	plans, err := s.store.List(ctx)
 	if err != nil {
 		return nil, err
