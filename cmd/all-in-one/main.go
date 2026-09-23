@@ -24,6 +24,7 @@ func main() {
 	if err := telemetry.Setup(context.Background()); err != nil {
 		panic(err)
 	}
+	telemetry.FlushOnStop()
 
 	mux := http.NewServeMux()
 

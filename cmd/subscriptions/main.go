@@ -22,6 +22,7 @@ func main() {
 	if err := telemetry.Setup(context.Background()); err != nil {
 		panic(err)
 	}
+	telemetry.FlushOnStop()
 
 	a := app.NewSubscription(&c.Subscriptions)
 	a.RegisterRoutes(http.DefaultServeMux)

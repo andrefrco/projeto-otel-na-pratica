@@ -5,28 +5,51 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
+	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/log/global"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.27.0"
+	"go.opentelemetry.io/otel/trace"
 )
+
+// Start emits a span, an info log and a counter for the same operation.
+func Start(ctx context.Context, scope, name string, kind trace.SpanKind) (context.Context, trace.Span) {
+	ctx, span := otel.Tracer(scope).Start(ctx, name, trace.WithSpanKind(kind))
+	otelslog.NewLogger(scope).InfoContext(ctx, name)
+	counter, err := otel.Meter(scope).Int64Counter(scope + ".operations")
+	if err == nil {
+		counter.Add(ctx, 1, metric.WithAttributes(attribute.String("operation", name)))
+	}
+	return ctx, span
+}
 
 const defaultEndpoint = "http://localhost:4318"
 const defaultServiceName = "projeto-otel-na-pratica"
 
-// Setup exports traces and logs over OTLP/HTTP.
+var (
+	tracerProvider *sdktrace.TracerProvider
+	loggerProvider *sdklog.LoggerProvider
+	meterProvider  *sdkmetric.MeterProvider
+)
+
+// Setup exports traces, logs and metrics over OTLP/HTTP.
 // OTEL_EXPORTER_OTLP_ENDPOINT overrides the collector address.
 // OTEL_SERVICE_NAME overrides the service name.
 func Setup(ctx context.Context) error {
@@ -62,11 +85,11 @@ func Setup(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("otel trace exporter: %w", err)
 	}
-	tp := sdktrace.NewTracerProvider(
+	tracerProvider = sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(traceExp),
 		sdktrace.WithResource(res),
 	)
-	otel.SetTracerProvider(tp)
+	otel.SetTracerProvider(tracerProvider)
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
@@ -76,21 +99,49 @@ func Setup(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("otel log exporter: %w", err)
 	}
-	lp := sdklog.NewLoggerProvider(
+	loggerProvider = sdklog.NewLoggerProvider(
 		sdklog.WithProcessor(sdklog.NewBatchProcessor(logExp)),
 		sdklog.WithResource(res),
 	)
-	global.SetLoggerProvider(lp)
+	global.SetLoggerProvider(loggerProvider)
 
 	metricExp, err := otlpmetrichttp.New(ctx, otlpmetrichttp.WithEndpointURL(endpoint))
 	if err != nil {
 		return fmt.Errorf("otel metric exporter: %w", err)
 	}
-	mp := sdkmetric.NewMeterProvider(
+	meterProvider = sdkmetric.NewMeterProvider(
 		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExp, sdkmetric.WithInterval(5*time.Second))),
 		sdkmetric.WithResource(res),
 	)
-	otel.SetMeterProvider(mp)
+	otel.SetMeterProvider(meterProvider)
 
 	return nil
+}
+
+// Shutdown flushes the batch exporters.
+func Shutdown(ctx context.Context) error {
+	var err error
+	if meterProvider != nil {
+		err = errors.Join(err, meterProvider.Shutdown(ctx))
+	}
+	if loggerProvider != nil {
+		err = errors.Join(err, loggerProvider.Shutdown(ctx))
+	}
+	if tracerProvider != nil {
+		err = errors.Join(err, tracerProvider.Shutdown(ctx))
+	}
+	return err
+}
+
+// FlushOnStop exports the last batch when the process receives SIGINT or SIGTERM.
+func FlushOnStop() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-ctx.Done()
+		stop()
+		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = Shutdown(shutCtx)
+		os.Exit(0)
+	}()
 }

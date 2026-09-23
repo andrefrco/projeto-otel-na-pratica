@@ -10,7 +10,7 @@ import (
 
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/pkg/model"
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/pkg/store"
-	"go.opentelemetry.io/otel"
+	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/telemetry"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -32,7 +32,7 @@ func NewSubscriptionHandler(store store.Subscription, usersEndpoint string, plan
 }
 
 func (h *SubscriptionHandler) List(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("subscriptions").Start(r.Context(), "subscription.list", trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(r.Context(), "subscriptions", "subscription.list", trace.SpanKindServer)
 	defer span.End()
 
 	if r.Method != http.MethodGet {
@@ -54,20 +54,20 @@ func (h *SubscriptionHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *SubscriptionHandler) Create(w http.ResponseWriter, r *http.Request) {
+	ctx, span := telemetry.Start(r.Context(), "subscriptions", "subscription.create", trace.SpanKindServer)
+	defer span.End()
+
 	subscription := &model.Subscription{}
 	if err := json.NewDecoder(r.Body).Decode(subscription); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
-
-	ctx, span := otel.Tracer("subscriptions").Start(r.Context(), "subscription.create", trace.WithSpanKind(trace.SpanKindServer))
-	defer span.End()
 	span.SetAttributes(attribute.String("enduser.id", subscription.UserID))
 
 	// verify the user exists
 	{
 		// Client span is a new root, and the name includes the user id.
-		_, clientSpan := otel.Tracer("subscriptions").Start(context.Background(), "GET "+h.usersEndpoint+"/"+subscription.UserID, trace.WithSpanKind(trace.SpanKindClient))
+		_, clientSpan := telemetry.Start(context.Background(), "subscriptions", "GET "+h.usersEndpoint+"/"+subscription.UserID, trace.SpanKindClient)
 		user, _ := http.Get(h.usersEndpoint + "/" + subscription.UserID)
 		clientSpan.End()
 		if user.StatusCode != http.StatusOK {
@@ -79,7 +79,7 @@ func (h *SubscriptionHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// verify the plan exists
 	{
-		_, clientSpan := otel.Tracer("subscriptions").Start(context.Background(), "GET "+h.plansEndpoint+"/"+subscription.PlanID, trace.WithSpanKind(trace.SpanKindClient))
+		_, clientSpan := telemetry.Start(context.Background(), "subscriptions", "GET "+h.plansEndpoint+"/"+subscription.PlanID, trace.SpanKindClient)
 		plan, _ := http.Get(h.plansEndpoint + "/" + subscription.PlanID)
 		clientSpan.End()
 		if plan.StatusCode != http.StatusOK {
@@ -104,7 +104,7 @@ func (h *SubscriptionHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 func (h *SubscriptionHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	ctx, span := otel.Tracer("subscriptions").Start(r.Context(), "GET /subscriptions/"+id, trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(r.Context(), "subscriptions", "GET /subscriptions/"+id, trace.SpanKindServer)
 	defer span.End()
 
 	subscription, err := h.store.Get(ctx, id)
@@ -132,7 +132,7 @@ func (h *SubscriptionHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, span := otel.Tracer("subscriptions").Start(r.Context(), "subscription.update", trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(r.Context(), "subscriptions", "subscription.update", trace.SpanKindServer)
 	defer span.End()
 
 	updatedSubscription, err := h.store.Update(ctx, subscription)
@@ -150,7 +150,7 @@ func (h *SubscriptionHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 func (h *SubscriptionHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	ctx, span := otel.Tracer("subscriptions").Start(r.Context(), "subscription.delete", trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(r.Context(), "subscriptions", "subscription.delete", trace.SpanKindServer)
 	defer span.End()
 
 	err := h.store.Delete(ctx, id)

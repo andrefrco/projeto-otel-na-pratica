@@ -9,7 +9,7 @@ import (
 
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/pkg/model"
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/pkg/store"
-	"go.opentelemetry.io/otel"
+	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/telemetry"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -26,11 +26,11 @@ func NewPlanHandler(store store.Plan) *PlanHandler {
 }
 
 func (h *PlanHandler) List(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("plans").Start(r.Context(), "plan.list", trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(r.Context(), "plans", "plan.list", trace.SpanKindServer)
 	defer span.End()
 	// More than 10 internal spans in one trace.
 	for i := 0; i < 11; i++ {
-		_, child := otel.Tracer("plans").Start(ctx, "plan.list.internal")
+		_, child := telemetry.Start(ctx, "plans", "plan.list.internal", trace.SpanKindInternal)
 		child.End()
 	}
 
@@ -48,14 +48,14 @@ func (h *PlanHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PlanHandler) Create(w http.ResponseWriter, r *http.Request) {
+	ctx, span := telemetry.Start(r.Context(), "plans", "plan.create", trace.SpanKindServer)
+	defer span.End()
+
 	plan := &model.Plan{}
 	if err := json.NewDecoder(r.Body).Decode(plan); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
-
-	ctx, span := otel.Tracer("plans").Start(r.Context(), "plan.create", trace.WithSpanKind(trace.SpanKindServer))
-	defer span.End()
 
 	created, err := h.store.Create(ctx, plan)
 	if err != nil {
@@ -73,7 +73,7 @@ func (h *PlanHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *PlanHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	// Span name includes the id.
-	ctx, span := otel.Tracer("plans").Start(r.Context(), "GET /plans/"+id, trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(r.Context(), "plans", "GET /plans/"+id, trace.SpanKindServer)
 	defer span.End()
 
 	plan, err := h.store.Get(ctx, id)
@@ -96,7 +96,7 @@ func (h *PlanHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, span := otel.Tracer("plans").Start(r.Context(), "plan.update", trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(r.Context(), "plans", "plan.update", trace.SpanKindServer)
 	defer span.End()
 
 	updated, err := h.store.Update(ctx, plan)
@@ -114,7 +114,7 @@ func (h *PlanHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 func (h *PlanHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	ctx, span := otel.Tracer("plans").Start(r.Context(), "plan.delete", trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(r.Context(), "plans", "plan.delete", trace.SpanKindServer)
 	defer span.End()
 
 	err := h.store.Delete(ctx, id)

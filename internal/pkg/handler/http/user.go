@@ -10,9 +10,11 @@ import (
 
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/pkg/model"
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/pkg/store"
+	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/telemetry"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -29,7 +31,7 @@ func NewUserHandler(store store.User) *UserHandler {
 }
 
 func (h *UserHandler) List(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("users").Start(r.Context(), "user.list", trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(r.Context(), "users", "user.list", trace.SpanKindServer)
 	defer span.End()
 
 	users, err := h.store.List(ctx)
@@ -46,19 +48,29 @@ func (h *UserHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
+	ctx, span := telemetry.Start(r.Context(), "users", "user.create", trace.SpanKindServer)
+	defer span.End()
+
 	user := &model.User{}
 	if err := json.NewDecoder(r.Body).Decode(user); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
-
-	ctx, span := otel.Tracer("users").Start(r.Context(), "user.create", trace.WithSpanKind(trace.SpanKindServer))
-	defer span.End()
 	span.SetAttributes(
 		attribute.String("user.email", user.Email),
 		attribute.String("user.address", user.Address),
 		attribute.String("service.name", "users"),
 	)
+
+	// Each distinct id, email and address is a new time series.
+	counter, counterErr := otel.Meter("users").Int64Counter("users.created")
+	if counterErr == nil {
+		counter.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("user.id", user.ID),
+			attribute.String("user.email", user.Email),
+			attribute.String("user.address", user.Address),
+		))
+	}
 
 	created, err := h.store.Create(ctx, user)
 	if err != nil {
@@ -78,7 +90,7 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	// Span name includes the id.
-	ctx, span := otel.Tracer("users").Start(r.Context(), "GET /users/"+id, trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(r.Context(), "users", "GET /users/"+id, trace.SpanKindServer)
 	defer span.End()
 
 	user, err := h.store.Get(ctx, id)
@@ -106,7 +118,7 @@ func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, span := otel.Tracer("users").Start(r.Context(), "user.update", trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(r.Context(), "users", "user.update", trace.SpanKindServer)
 	defer span.End()
 
 	updatedSubscription, err := h.store.Update(ctx, user)
@@ -124,7 +136,7 @@ func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 func (h *UserHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	ctx, span := otel.Tracer("users").Start(r.Context(), "user.delete", trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(r.Context(), "users", "user.delete", trace.SpanKindServer)
 	defer span.End()
 
 	err := h.store.Delete(ctx, id)

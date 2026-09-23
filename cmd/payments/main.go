@@ -22,6 +22,7 @@ func main() {
 	if err := telemetry.Setup(context.Background()); err != nil {
 		panic(err)
 	}
+	telemetry.FlushOnStop()
 
 	a, _ := app.NewPayment(&c.Payments)
 	a.RegisterRoutes(http.DefaultServeMux)

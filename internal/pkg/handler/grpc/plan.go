@@ -10,7 +10,7 @@ import (
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/api"
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/pkg/model"
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/pkg/store"
-	"go.opentelemetry.io/otel"
+	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/telemetry"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -27,7 +27,7 @@ func NewPlanServer(store store.Plan) api.PlanServiceServer {
 }
 
 func (s *planServer) Get(ctx context.Context, req *api.GetRequest) (*api.GetResponse, error) {
-	ctx, span := otel.Tracer("plans").Start(ctx, "GET /plans/"+req.Id, trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(ctx, "plans", "GET /plans/"+req.Id, trace.SpanKindServer)
 	defer span.End()
 
 	plan, err := s.store.Get(ctx, req.Id)
@@ -51,7 +51,7 @@ func (s *planServer) Get(ctx context.Context, req *api.GetRequest) (*api.GetResp
 }
 
 func (s *planServer) Create(ctx context.Context, req *api.CreateRequest) (*api.CreateResponse, error) {
-	ctx, span := otel.Tracer("plans").Start(ctx, "plan.create", trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(ctx, "plans", "plan.create", trace.SpanKindServer)
 	defer span.End()
 
 	plan, err := s.store.Create(ctx, &model.Plan{
@@ -82,7 +82,7 @@ func (s *planServer) Create(ctx context.Context, req *api.CreateRequest) (*api.C
 }
 
 func (s *planServer) Update(ctx context.Context, req *api.UpdateRequest) (*api.UpdateResponse, error) {
-	ctx, span := otel.Tracer("plans").Start(ctx, "plan.update", trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(ctx, "plans", "plan.update", trace.SpanKindServer)
 	defer span.End()
 
 	plan, err := s.store.Update(ctx, &model.Plan{
@@ -112,7 +112,7 @@ func (s *planServer) Update(ctx context.Context, req *api.UpdateRequest) (*api.U
 }
 
 func (s *planServer) Delete(ctx context.Context, req *api.DeleteRequest) (*api.DeleteResponse, error) {
-	ctx, span := otel.Tracer("plans").Start(ctx, "plan.delete", trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(ctx, "plans", "plan.delete", trace.SpanKindServer)
 	defer span.End()
 
 	err := s.store.Delete(ctx, req.Id)
@@ -123,7 +123,7 @@ func (s *planServer) Delete(ctx context.Context, req *api.DeleteRequest) (*api.D
 }
 
 func (s *planServer) List(ctx context.Context, req *api.ListRequest) (*api.ListResponse, error) {
-	ctx, span := otel.Tracer("plans").Start(ctx, "plan.list", trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(ctx, "plans", "plan.list", trace.SpanKindServer)
 	defer span.End()
 
 	plans, err := s.store.List(ctx)

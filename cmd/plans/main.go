@@ -24,6 +24,7 @@ func main() {
 	if err := telemetry.Setup(context.Background()); err != nil {
 		panic(err)
 	}
+	telemetry.FlushOnStop()
 
 	// starts the gRPC server
 	lis, _ := net.Listen("tcp", c.Server.Endpoint.GRPC)

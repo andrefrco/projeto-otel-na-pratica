@@ -10,6 +10,7 @@ import (
 
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/pkg/model"
 	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/pkg/store"
+	"github.com/dosedetelemetria/projeto-otel-na-pratica/internal/telemetry"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"go.opentelemetry.io/otel"
@@ -37,7 +38,7 @@ func NewPaymentHandler(store store.Payment, js jetstream.JetStream, jsSubject st
 }
 
 func (h *PaymentHandler) List(w http.ResponseWriter, r *http.Request) {
-	ctx, span := otel.Tracer("payments").Start(r.Context(), "payment.list", trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(r.Context(), "payments", "payment.list", trace.SpanKindServer)
 	defer span.End()
 
 	payments, err := h.store.List(ctx)
@@ -54,18 +55,18 @@ func (h *PaymentHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PaymentHandler) Create(w http.ResponseWriter, r *http.Request) {
+	ctx, span := telemetry.Start(r.Context(), "payments", "payment.create", trace.SpanKindServer)
+	defer span.End()
+
 	var payment model.Payment
 	if err := json.NewDecoder(r.Body).Decode(&payment); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
-	ctx, span := otel.Tracer("payments").Start(r.Context(), "payment.create", trace.WithSpanKind(trace.SpanKindServer))
-	defer span.End()
-
 	// Check if subscription exists.
 	// Client span is a new root, and the name includes the subscription id.
-	_, clientSpan := otel.Tracer("payments").Start(context.Background(), "GET "+h.subscriptionsEndpoint+"/"+payment.SubscriptionID, trace.WithSpanKind(trace.SpanKindClient))
+	_, clientSpan := telemetry.Start(context.Background(), "payments", "GET "+h.subscriptionsEndpoint+"/"+payment.SubscriptionID, trace.SpanKindClient)
 	sub, _ := http.Get(h.subscriptionsEndpoint + "/" + payment.SubscriptionID)
 	clientSpan.End()
 	if sub.StatusCode != http.StatusOK {
@@ -80,10 +81,13 @@ func (h *PaymentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	_, pubSpan := telemetry.Start(ctx, "payments", "publish "+h.jsSubject+" "+payment.ID, trace.SpanKindProducer)
+	pubSpan.SetAttributes(attribute.String("messaging.body", string(payload)))
 	_, err = h.js.PublishMsgAsync(&nats.Msg{
 		Subject: h.jsSubject,
 		Data:    payload,
 	})
+	pubSpan.End()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -105,7 +109,7 @@ func (h *PaymentHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 func (h *PaymentHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	ctx, span := otel.Tracer("payments").Start(r.Context(), "GET /payments/"+id, trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(r.Context(), "payments", "GET /payments/"+id, trace.SpanKindServer)
 	defer span.End()
 
 	payment, err := h.store.Get(ctx, id)
@@ -133,7 +137,7 @@ func (h *PaymentHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, span := otel.Tracer("payments").Start(r.Context(), "payment.update", trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(r.Context(), "payments", "payment.update", trace.SpanKindServer)
 	defer span.End()
 
 	_, err := h.store.Update(ctx, payment)
@@ -151,7 +155,7 @@ func (h *PaymentHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 func (h *PaymentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	ctx, span := otel.Tracer("payments").Start(r.Context(), "payment.delete", trace.WithSpanKind(trace.SpanKindServer))
+	ctx, span := telemetry.Start(r.Context(), "payments", "payment.delete", trace.SpanKindServer)
 	defer span.End()
 
 	err := h.store.Delete(ctx, id)
@@ -162,7 +166,7 @@ func (h *PaymentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PaymentHandler) OnMessage(msg jetstream.Msg) {
-	ctx, span := otel.Tracer("payments").Start(context.Background(), "payment.consume", trace.WithSpanKind(trace.SpanKindConsumer))
+	ctx, span := telemetry.Start(context.Background(), "payments", "payment.consume", trace.SpanKindConsumer)
 	defer span.End()
 
 	payment := &model.Payment{}
